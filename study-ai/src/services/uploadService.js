@@ -106,7 +106,7 @@ class UploadService {
    */
   static async getUploadedFiles() {
     try {
-      const response = await fetch(`${API_BASE_URL}/upload/files`);
+      const response = await fetch(`${API_BASE_URL}/documents/list`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -126,17 +126,88 @@ class UploadService {
    */
   static async deleteFile(fileId) {
     try {
-      const response = await fetch(`${API_BASE_URL}/upload/files/${fileId}`, {
+      const response = await fetch(`${API_BASE_URL}/documents/${fileId}`, {
         method: 'DELETE'
       });
 
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to delete file:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete all uploaded files
+   * @returns {Promise<Object>} Delete response
+   */
+  static async deleteAllFiles() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/documents/`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to delete all files:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bulk delete multiple files
+   * @param {string[]} fileIds - Array of file IDs to delete
+   * @returns {Promise<Object>} Delete response
+   */
+  static async bulkDeleteFiles(fileIds) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/documents/bulk-delete`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          documentIds: fileIds
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to bulk delete files:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get delete information
+   * @returns {Promise<Object>} Delete info
+   */
+  static async getDeleteInfo() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/documents/delete/info`);
+      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
     } catch (error) {
-      console.error('Failed to delete file:', error);
+      console.error('Failed to get delete info:', error);
       throw error;
     }
   }

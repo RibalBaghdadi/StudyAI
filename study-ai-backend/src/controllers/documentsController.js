@@ -384,6 +384,40 @@ class DocumentsController {
   }
   
   /**
+   * Helper: Clean filename for display
+   */
+  static cleanFilenameForDisplay(filename) {
+    if (!filename) return 'Unknown File';
+    
+    // Check if it's a generated filename with timestamp prefix
+    const generatedPattern = /^(\d+_[a-z0-9]+_)/i;
+    let cleanName = filename;
+    
+    if (generatedPattern.test(filename)) {
+      // Remove the prefix (timestamp_random_)
+      cleanName = filename.replace(generatedPattern, '');
+    }
+    
+    // Clean up the name for display
+    cleanName = cleanName
+      .replace(/_/g, ' ')           // Replace underscores with spaces
+      .replace(/\s+/g, ' ')         // Replace multiple spaces with single space
+      .replace(/^\s+|\s+$/g, '')    // Trim whitespace
+      .split('.')                   // Split by dots
+      .map((part, index, array) => {
+        // Don't modify the file extension (last part)
+        if (index === array.length - 1) return part;
+        // Capitalize first letter of each word for the filename part
+        return part.split(' ').map(word => 
+          word.length > 0 ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : word
+        ).join(' ');
+      })
+      .join('.');
+    
+    return cleanName;
+  }
+
+  /**
    * Helper: Get document info with extracted content
    */
   static async getDocumentInfo(file, type, extractedFiles) {
@@ -391,6 +425,9 @@ class DocumentsController {
       // Extract document ID from filename (timestamp part)
       const idMatch = file.name.match(/^(\d+_[a-z0-9]+)/i);
       const documentId = idMatch ? idMatch[1] : file.name.replace(/\.[^/.]+$/, '');
+      
+      // Clean the filename for display
+      const displayName = DocumentsController.cleanFilenameForDisplay(file.name);
       
       // Find corresponding extracted text file
       const extractedFile = extractedFiles.find(ef => ef.name.includes(documentId));
@@ -412,8 +449,9 @@ class DocumentsController {
       
       return {
         id: documentId,
-        name: file.name,
-        originalName: file.name,
+        name: displayName, // Use cleaned display name
+        originalName: displayName, // Store cleaned name as original
+        storageFilename: file.name, // Keep storage filename for internal use
         size: file.size,
         type: type,
         uploadDate: file.uploadDate,

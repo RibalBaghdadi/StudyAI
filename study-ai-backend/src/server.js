@@ -53,7 +53,15 @@ app.get('/api/debug', (req, res) => {
     availableRoutes: [
       'GET /api/chat/test',
       'POST /api/chat/message',
-      'GET /api/chat/health'
+      'GET /api/chat/health',
+      'GET /api/documents/list',
+      'GET /api/documents/:id/content',
+      'GET /api/documents/:id/summary',
+      'GET /api/documents/:id/context',
+      'GET /api/documents/delete/info',
+      'DELETE /api/documents/:id',
+      'DELETE /api/documents/',
+      'DELETE /api/documents/bulk-delete'
     ]
   });
 });
