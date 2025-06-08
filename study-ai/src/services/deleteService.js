@@ -26,7 +26,63 @@ class DeleteService {
   }
 
   /**
-   * Delete specific document
+   * Clear the chat service cache - CRITICAL for fixing chatbot issue
+   * @returns {Promise<boolean>} Success status
+   */
+  static async clearChatCache() {
+    try {
+      console.log('🧹 Clearing chat cache to prevent access to deleted files...');
+      
+      const response = await fetch(`${API_BASE_URL}/chat/clear-cache`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Chat cache cleared successfully:', result.message);
+        return true;
+      } else {
+        const error = await response.json();
+        console.warn('⚠️ Failed to clear chat cache:', error.message);
+        return false;
+      }
+    } catch (error) {
+      console.warn('⚠️ Error clearing chat cache:', error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Check chat context status (for verification)
+   * @returns {Promise<Object|null>} Context status
+   */
+  static async checkChatContextStatus() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/chat/context-status`);
+      const result = await response.json();
+      
+      if (response.ok && result.success) {
+        console.log('📊 Chat context status:', {
+          hasContent: result.status.hasContext,
+          files: result.status.availableFiles,
+          contextLength: result.status.contextLength
+        });
+        return result.status;
+      } else {
+        console.warn('Failed to check chat context status:', result.error);
+        return null;
+      }
+    } catch (error) {
+      console.warn('Error checking chat context status:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Delete specific document with chat cache invalidation
    * @param {string} documentId - Document ID to delete
    * @returns {Promise<Object>} Delete result
    */
@@ -41,7 +97,20 @@ class DeleteService {
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      
+      // CRITICAL: Clear chat cache after successful deletion
+      if (result.success) {
+        console.log('🗑️ Document deleted, clearing chat cache...');
+        await this.clearChatCache();
+        
+        // Wait a moment and verify
+        setTimeout(async () => {
+          await this.checkChatContextStatus();
+        }, 1000);
+      }
+
+      return result;
     } catch (error) {
       console.error('Delete document error:', error);
       return {
@@ -52,7 +121,7 @@ class DeleteService {
   }
 
   /**
-   * Delete ALL documents (nuclear option)
+   * Delete ALL documents with chat cache invalidation (nuclear option)
    * @returns {Promise<Object>} Delete result
    */
   static async deleteAllDocuments() {
@@ -66,7 +135,23 @@ class DeleteService {
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      
+      // CRITICAL: Clear chat cache after successful deletion
+      if (result.success) {
+        console.log('🗑️ All documents deleted, clearing chat cache...');
+        await this.clearChatCache();
+        
+        // Wait a moment and verify
+        setTimeout(async () => {
+          const status = await this.checkChatContextStatus();
+          if (status && status.availableFiles === 0) {
+            console.log('✅ Verification: Chat now has no access to deleted files');
+          }
+        }, 1000);
+      }
+
+      return result;
     } catch (error) {
       console.error('Delete all documents error:', error);
       return {
@@ -82,7 +167,7 @@ class DeleteService {
    * @returns {boolean} User confirmation
    */
   static confirmSingleDelete(document) {
-    const message = `Are you sure you want to delete "${document.name}"?\n\nThis action cannot be undone.`;
+    const message = `Are you sure you want to delete "${document.name}"?\n\nThis action cannot be undone.\n\n⚠️ The chatbot will also lose access to this content.`;
     return window.confirm(message);
   }
 
@@ -92,14 +177,14 @@ class DeleteService {
    * @returns {boolean} User confirmation
    */
   static confirmDeleteAll(totalFiles) {
-    const message = `⚠️ WARNING: This will permanently delete ALL ${totalFiles} uploaded files!\n\nThis includes:\n- Original documents\n- Extracted text\n- All processed data\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?`;
+    const message = `⚠️ WARNING: This will permanently delete ALL ${totalFiles} uploaded files!\n\nThis includes:\n- Original documents\n- Extracted text\n- All processed data\n- Chat context will be cleared\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?`;
     
     if (!window.confirm(message)) {
       return false;
     }
     
     // Double confirmation for nuclear option
-    const doubleConfirm = window.confirm(`🚨 FINAL CONFIRMATION 🚨\n\nYou are about to DELETE ALL ${totalFiles} files permanently.\n\nType "DELETE" in the next prompt to confirm.`);
+    const doubleConfirm = window.confirm(`🚨 FINAL CONFIRMATION 🚨\n\nYou are about to DELETE ALL ${totalFiles} files permanently.\n\nThe chatbot will lose ALL context.\n\nType "DELETE" in the next prompt to confirm.`);
     
     if (doubleConfirm) {
       const typeConfirm = window.prompt('Type "DELETE" (in caps) to confirm:');
@@ -121,15 +206,15 @@ class DeleteService {
     
     if (result.totalDeleted !== undefined) {
       // Delete all result
-      return `✅ Successfully deleted ${result.totalDeleted} files from ${result.foldersProcessed?.join(', ')} folders`;
+      return `✅ Successfully deleted ${result.totalDeleted} files from ${result.foldersProcessed?.join(', ')} folders. Chat cache cleared.`;
     } else {
       // Single delete result
-      return `✅ Successfully deleted "${result.documentId}" (${result.totalDeleted} files)`;
+      return `✅ Successfully deleted "${result.documentId}" (${result.totalDeleted} files). Chat cache cleared.`;
     }
   }
 
   /**
-   * Handle delete with confirmation and feedback
+   * Handle delete with confirmation, feedback, and cache invalidation
    * @param {Object} document - Document to delete (null for delete all)
    * @param {Function} onSuccess - Success callback
    * @param {Function} onError - Error callback
@@ -181,7 +266,7 @@ class DeleteService {
   }
 
   /**
-   * Bulk delete multiple documents
+   * Bulk delete multiple documents with cache invalidation
    * @param {Array} documents - Array of documents to delete
    * @param {Function} onProgress - Progress callback
    * @returns {Promise<Object>} Bulk delete result
@@ -192,6 +277,8 @@ class DeleteService {
       failed: [],
       total: documents.length
     };
+    
+    console.log(`🗑️ Starting bulk delete of ${documents.length} documents...`);
     
     for (let i = 0; i < documents.length; i++) {
       const doc = documents[i];
@@ -212,6 +299,12 @@ class DeleteService {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     
+    // Final cache clear after bulk operations
+    if (results.successful.length > 0) {
+      console.log('🧹 Bulk delete completed, ensuring chat cache is cleared...');
+      await this.clearChatCache();
+    }
+    
     return results;
   }
 
@@ -220,13 +313,28 @@ class DeleteService {
    * @returns {Promise<Object>} Delete result
    */
   static async quickDeleteAll() {
-    const confirmed = window.confirm('🧹 Quick delete all documents?\n\n(This is a dev shortcut - use with caution!)');
+    const confirmed = window.confirm('🧹 Quick delete all documents?\n\n(This is a dev shortcut - use with caution!)\n\nChat cache will be cleared.');
     
     if (confirmed) {
       return await this.deleteAllDocuments();
     }
     
     return { success: false, error: 'User cancelled' };
+  }
+
+  /**
+   * Test function to manually clear chat cache
+   * @returns {Promise<boolean>} Success status
+   */
+  static async testClearCache() {
+    console.log('🧪 Testing manual cache clear...');
+    const success = await this.clearChatCache();
+    
+    if (success) {
+      await this.checkChatContextStatus();
+    }
+    
+    return success;
   }
 }
 
